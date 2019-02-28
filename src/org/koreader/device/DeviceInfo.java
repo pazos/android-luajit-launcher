@@ -75,7 +75,7 @@ public class DeviceInfo {
 
         // Boyue Likebook Mimas
         EINK_BOYUE_T103D = (MANUFACTURER.toLowerCase().contentEquals("boeye") || MANUFACTURER.toLowerCase().contentEquals("boyue"))
-                && PRODUCT.toLowerCase().contentEquals("likebook-t103d");
+                && PRODUCT.toLowerCase().contentEquals("t103d");
         deviceMap.put(Device.EINK_BOYUE_T103D, EINK_BOYUE_T103D);
 
         // Onyx C67
