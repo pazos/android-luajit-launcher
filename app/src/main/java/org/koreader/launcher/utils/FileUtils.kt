@@ -1,7 +1,9 @@
 package org.koreader.launcher.utils
 
+
 import android.content.ContentResolver
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -9,6 +11,8 @@ import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.system.Os
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import org.koreader.launcher.BuildConfig
 import org.koreader.launcher.Logger
 import java.io.*
 import java.util.*
@@ -26,6 +30,33 @@ object FileUtils {
      * @param path where the new file will be stored
      * @return 1 if the file(s) were imported, 0 otherwise (IOError, invalid path, invalid uri..)
      */
+
+
+    /**
+     * install an update from an APK file
+     *
+     * @param context of the activity
+     * @param file with an updated APK - versionCode should be newer or equal that current install
+     *
+     */
+
+    @Suppress("DEPRECATION")
+    fun installApk(context: Context, file: File) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val uri = FileProvider.getUriForFile(context,
+                BuildConfig.APPLICATION_ID + ".provider", file)
+            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE)
+            intent.data = uri
+            intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            context.startActivity(intent)
+        } else {
+            val uri = Uri.fromFile(file)
+            val intent = Intent(Intent.ACTION_VIEW)
+            intent.setDataAndType(uri, "application/vnd.android.package-archive")
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            context.startActivity(intent)
+        }
+    }
 
     fun saveAsFile(context: Context, uri: Uri?, path: String): Int {
         return uri?.let { getFileFromContentUri(context, it, path)?.let { 1 } ?: 0 } ?: 0

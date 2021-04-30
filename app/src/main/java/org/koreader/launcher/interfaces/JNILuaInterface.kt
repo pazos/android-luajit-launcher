@@ -3,6 +3,7 @@ package org.koreader.launcher.interfaces
 /* Declares methods that are exposed to lua via JNI
  * See https://github.com/koreader/android-luajit-launcher/blob/master/assets/android.lua */
 
+@Suppress("unused")
 interface JNILuaInterface {
     fun canIgnoreBatteryOptimizations(): Boolean
     fun canWriteSystemSettings(): Boolean
@@ -41,6 +42,8 @@ interface JNILuaInterface {
     fun hasClipboardText(): Boolean
     fun hasExternalStoragePermission(): Boolean
     fun hasNativeRotation(): Boolean
+    fun hasOTAUpdates(): Boolean
+    fun installApk()
     fun isCharging(): Boolean
     fun isChromeOS(): Boolean
     fun isDebuggable(): Boolean

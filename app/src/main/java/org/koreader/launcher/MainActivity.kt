@@ -3,7 +3,9 @@ package org.koreader.launcher
 import android.annotation.SuppressLint
 import android.annotation.TargetApi
 import android.app.Activity
+import android.app.DownloadManager
 import android.app.NativeActivity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -12,6 +14,7 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.Settings
 import android.view.*
 import android.widget.Toast
@@ -20,11 +23,14 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.koreader.launcher.interfaces.JNILuaInterface
 import org.koreader.launcher.utils.*
+import java.io.File
 import java.util.*
 
 @Keep
 class MainActivity : NativeActivity(), JNILuaInterface,
     ActivityCompat.OnRequestPermissionsResultCallback{
+
+    private val tag = this::class.java.simpleName
 
     private lateinit var assets: Assets
     private lateinit var clipboard: Clipboard
@@ -33,7 +39,10 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     private lateinit var timeout: Timeout
 
     // Path of last file imported
-    private var lastImportedPath: String? = null
+    private var lastPath: String? = null
+
+    // Path of the last APK downloaded
+    private var lastDownload: String? = null
 
     // Some devices need to take control of the native window
     private var takesWindowOwnership: Boolean = false
@@ -42,7 +51,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     private var topInsetHeight: Int = 0
 
     // Fullscreen - only used on API levels 16-18
-    private var fullscreen: Boolean = true
+    private var isInFullscreen: Boolean = true
 
     // Splashscreen is active
     private var splashScreen: Boolean = true
@@ -69,8 +78,11 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     }
 
     companion object {
-        private const val TAG_MAIN = "MainActivity"
         private const val ACTION_SAF_FILEPICKER = 2
+        private const val DOWNLOAD_OK = 0
+        private const val DOWNLOAD_EXISTS = 1
+        private const val DOWNLOAD_FAILED = -1
+        private const val DOWNLOAD_NOT_SUPPORTED = -2
         private val BATTERY_FILTER = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         private val RUNTIME_VERSION = Build.VERSION.RELEASE
     }
@@ -86,7 +98,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     /* Called when the activity is first created. */
     override fun onCreate(savedInstanceState: Bundle?) {
         Logger.v(String.format(Locale.US,
-            "Launching %s %s", BuildConfig.APP_NAME, MainApp.info))
+            "Launching %s %s", MainApp.name, MainApp.info))
 
         assets = Assets()
         clipboard = Clipboard(this)
@@ -110,9 +122,8 @@ class MainActivity : NativeActivity(), JNILuaInterface,
         } else {
             "Native Content"
         }
-        Logger.v(TAG_MAIN, "surface: $surfaceKind")
+        Logger.v(tag, "surface: $surfaceKind")
 
-        registerReceiver(event, event.filter)
         if (!Permissions.hasStoragePermission(this)) {
             Permissions.requestStoragePermission(this)
         }
@@ -139,7 +150,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        Logger.v(TAG_MAIN, String.format(Locale.US,
+        Logger.v(tag, String.format(Locale.US,
             "surface changed {\n  width:  %d\n  height: %d\n format: %s\n}",
             width, height, ScreenUtils.pixelFormatName(format))
         )
@@ -148,14 +159,14 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     }
 
     override fun onAttachedToWindow() {
-        Logger.d(TAG_MAIN, "onAttachedToWindow()")
+        Logger.d(tag, "onAttachedToWindow()")
         super.onAttachedToWindow()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val cut: DisplayCutout? = window.decorView.rootWindowInsets.displayCutout
             if (cut != null) {
                 val cutPixels = cut.safeInsetTop
                 if (topInsetHeight != cutPixels) {
-                    Logger.v(TAG_MAIN,
+                    Logger.v(tag,
                         "top $cutPixels pixels are not available, reason: window inset")
                     topInsetHeight = cutPixels
                 }
@@ -166,22 +177,22 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     /* Called just before the activity is resumed by an intent */
     override fun onNewIntent(intent: Intent) {
         val scheme = intent.scheme
-        Logger.d(TAG_MAIN, "onNewIntent(): $scheme")
+        Logger.d(tag, "onNewIntent(): $scheme")
         super.onNewIntent(intent)
         setIntent(intent)
     }
 
     /* Called on permission result */
     override fun onRequestPermissionsResult(requestCode: Int, permissions:
-        Array<String>, grantResults: IntArray) {
-        Logger.d(TAG_MAIN, "onRequestPermissionResult()")
+    Array<String>, grantResults: IntArray) {
+        Logger.d(tag, "onRequestPermissionResult()")
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (Permissions.hasStoragePermission(this)) {
-            Logger.i(TAG_MAIN, String.format(Locale.US,
-                    "Permission granted for request code: %d", requestCode))
+            Logger.i(tag, String.format(Locale.US,
+                "Permission granted for request code: %d", requestCode))
         } else {
-            Logger.e(TAG_MAIN, String.format(Locale.US,
-                    "Permission rejected for request code: %d", requestCode))
+            Logger.e(tag, String.format(Locale.US,
+                "Permission rejected for request code: %d", requestCode))
         }
     }
 
@@ -189,7 +200,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     @TargetApi(19)
     override fun onActivityResult(requestCode: Int, resultCode: Int, resultData: Intent?) {
         if (requestCode == ACTION_SAF_FILEPICKER && resultCode == Activity.RESULT_OK) {
-            val importPath = lastImportedPath ?: return
+            val importPath = lastPath ?: return
             resultData?.let {
                 val clipData = it.clipData
                 if (clipData != null) {
@@ -210,7 +221,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
 
     /* Called when the activity is going to be destroyed */
     public override fun onDestroy() {
-        Logger.v(TAG_MAIN, "onDestroy()")
+        Logger.v(tag, "onDestroy()")
         unregisterReceiver(event)
         super.onDestroy()
     }
@@ -231,14 +242,44 @@ class MainActivity : NativeActivity(), JNILuaInterface,
             action?.let { lookupAction ->
                 val lookupIntent = Intent(IntentUtils.getByAction(lookupText, lookupAction, nullablePackage))
                 if (!startActivityIfSafe(lookupIntent)) {
-                    Logger.e(TAG_MAIN, "invalid lookup: can't find a package able to resolve $action")
+                    Logger.e(tag, "invalid lookup: can't find a package able to resolve $action")
                 }
-            } ?: Logger.e(TAG_MAIN, "invalid lookup: no action")
-        } ?: Logger.e(TAG_MAIN, "invalid lookup: no text")
+            } ?: Logger.e(tag, "invalid lookup: no action")
+        } ?: Logger.e(tag, "invalid lookup: no text")
     }
 
+    @Suppress("DEPRECATION")
     override fun download(url: String, name: String): Int {
-        return ApkUpdater.download(this, url, name)
+        return if (MainApp.is_ota_enabled) {
+            val path = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS).toString() + "/" + name
+
+            val request = DownloadManager.Request(Uri.parse(url))
+            request.setTitle(MainApp.name)
+            request.setDescription(name)
+            request.setMimeType("application/vnd.android.package-archive")
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
+
+            /* Try to download the request. This *should* not fail, but it fails
+               on some AOSP devices that don't need to pass google CTS. */
+            try {
+                if (File(path).exists()) {
+                    lastDownload = path
+                    DOWNLOAD_EXISTS
+                }
+                val manager = applicationContext.getSystemService(Context.DOWNLOAD_SERVICE)
+                    as DownloadManager
+                manager.enqueue(request)
+                lastDownload = path
+                DOWNLOAD_OK
+            } catch (e: Exception) {
+                e.printStackTrace()
+                DOWNLOAD_FAILED
+            }
+        } else {
+            DOWNLOAD_NOT_SUPPORTED
+        }
     }
 
     override fun einkUpdate(mode: Int) {
@@ -298,12 +339,12 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     }
 
     override fun getFlavor(): String {
-        return BuildConfig.FLAVOR_CHANNEL
+        return MainApp.flavor
     }
 
     override fun getLastImportedPath(): String? {
-        val current = lastImportedPath
-        lastImportedPath = null
+        val current = lastPath
+        lastPath = null
         return current
     }
 
@@ -312,7 +353,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     }
 
     override fun getName(): String {
-        return BuildConfig.APP_NAME
+        return MainApp.name
     }
 
     override fun getNetworkInfo(): String {
@@ -417,6 +458,17 @@ class MainActivity : NativeActivity(), JNILuaInterface,
         } else false
     }
 
+    override fun hasOTAUpdates(): Boolean {
+        return MainApp.is_ota_enabled
+    }
+
+    override fun installApk() {
+        lastDownload?.let { apk ->
+            FileUtils.installApk(this@MainActivity, File(apk))
+            lastDownload = null
+        }
+    }
+
     override fun isCharging(): Boolean {
         return (getBatteryState(false) == 1)
     }
@@ -427,7 +479,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
 
     @Suppress("ConstantConditionIf")
     override fun isDebuggable(): Boolean {
-        return BuildConfig.DEBUG
+        return MainApp.is_debug
     }
 
     override fun isEink(): Boolean {
@@ -441,7 +493,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     override fun isFullscreen(): Boolean {
         return if (Build.VERSION.SDK_INT == Build.VERSION_CODES.JELLY_BEAN_MR2 ||
             Build.VERSION.SDK_INT == Build.VERSION_CODES.JELLY_BEAN_MR1) {
-            fullscreen
+            isInFullscreen
         } else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.JELLY_BEAN) {
             ScreenUtils.isFullscreenDeprecated(this)
         } else {
@@ -512,7 +564,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     }
 
     override fun safFilePicker(path: String?): Boolean {
-        lastImportedPath = path
+        lastPath = path
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
             intent.addCategory(Intent.CATEGORY_OPENABLE)
@@ -520,7 +572,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
             intent.putExtra(Intent.EXTRA_MIME_TYPES, getSupportedMimetypes())
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            lastImportedPath?.let {
+            lastPath?.let {
                 try {
                     startActivityForResult(intent, ACTION_SAF_FILEPICKER)
                     true
@@ -546,7 +598,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
     override fun setFullscreen(enabled: Boolean) {
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.JELLY_BEAN_MR2 ||
             Build.VERSION.SDK_INT == Build.VERSION_CODES.JELLY_BEAN_MR1) {
-            fullscreen = enabled
+            isInFullscreen = enabled
         } else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.JELLY_BEAN) {
             ScreenUtils.setFullscreenDeprecated(this, enabled)
         }
@@ -614,7 +666,7 @@ class MainActivity : NativeActivity(), JNILuaInterface,
                         splashDrawable.draw(canvas)
                     }
                 } catch (e: Exception) {
-                    Logger.w(TAG_MAIN, "Failed to draw splash screen:\n$e")
+                    Logger.w(tag, "Failed to draw splash screen:\n$e")
                 }
                 holder.unlockCanvasAndPost(canvas)
             }
@@ -712,15 +764,15 @@ class MainActivity : NativeActivity(), JNILuaInterface,
             val pm = packageManager
             val act = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
             if (act.size > 0) {
-                Logger.d(TAG_MAIN, "starting activity with intent: $intentStr")
+                Logger.d(tag, "starting activity with intent: $intentStr")
                 startActivity(intent)
                 return true
             } else {
-                Logger.w(TAG_MAIN, "unable to find a package for $intentStr")
+                Logger.w(tag, "unable to find a package for $intentStr")
             }
             return false
         } catch (e: Exception) {
-            Logger.e(TAG_MAIN, "error opening $intentStr\nException: $e")
+            Logger.e(tag, "error opening $intentStr\nException: $e")
             return false
         }
     }

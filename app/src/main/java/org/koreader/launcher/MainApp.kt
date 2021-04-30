@@ -8,9 +8,17 @@ import android.os.Environment
 import android.os.StrictMode
 
 class MainApp : android.app.Application() {
-    companion object {
-        private val runtime = android.os.Build.VERSION.SDK_INT
 
+    companion object {
+
+        // defined at build time
+        const val name = BuildConfig.APP_NAME
+        const val flavor = BuildConfig.FLAVOR_CHANNEL
+        const val is_ota_enabled = BuildConfig.IN_APP_UPDATES
+        val is_debug = BuildConfig.DEBUG
+
+        // runtime dependant
+        private val runtime = android.os.Build.VERSION.SDK_INT
         lateinit var info: String
             private set
         lateinit var assets_path: String
@@ -30,8 +38,8 @@ class MainApp : android.app.Application() {
         val isSystemApp = (pm.getPackageInfo(packageName, 0).applicationInfo.flags
             and ApplicationInfo.FLAG_SYSTEM == 1)
 
-        @Suppress("ConstantConditionIf")
-        val flags: String = if (BuildConfig.DEBUG) {
+
+        val flags: String = if (is_debug) {
             val threadPolicy = StrictMode.ThreadPolicy.Builder().detectAll().penaltyLog().build()
             val vmPolicy = StrictMode.VmPolicy.Builder().detectAll().penaltyLog().build()
             StrictMode.setThreadPolicy(threadPolicy)

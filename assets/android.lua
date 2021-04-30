@@ -495,6 +495,7 @@ enum {
 enum {
     AEVENT_POWER_CONNECTED = 100,
     AEVENT_POWER_DISCONNECTED = 101,
+    AEVENT_DOWNLOAD_COMPLETE = 110,
 };
 
 int32_t AInputEvent_getType(const AInputEvent* event);
@@ -2099,6 +2100,26 @@ local function run(android_app_state)
                 android.app.activity.clazz,
                 "hasNativeRotation",
                 "()Z"
+            )
+        end)
+    end
+
+    android.hasOTAUpdates = function()
+        return JNI:context(android.app.activity.vm, function(jni)
+            return jni:callBooleanMethod(
+                android.app.activity.clazz,
+                "hasOTAUpdates",
+                "()Z"
+            )
+        end)
+    end
+
+    android.installApk = function()
+        JNI:context(android.app.activity.vm, function(jni)
+            jni:callVoidMethod(
+                android.app.activity.clazz,
+                "installApk",
+                "()V"
             )
         end)
     end
