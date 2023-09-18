@@ -1955,24 +1955,8 @@ local function run(android_app_state)
     android.ota = {
         isRunning = false,
         isPending = false,
-        isEnabled = function()
-            return JNI:context(android.app.activity.vm, function(jni)
-                return jni:callBooleanMethod(
-                    android.app.activity.clazz,
-                    "hasOTAUpdates",
-                    "()Z"
-                )
-            end)
-        end,
-        install = function()
-            JNI:context(android.app.activity.vm, function(jni)
-                jni:callVoidMethod(
-                    android.app.activity.clazz,
-                    "installApk",
-                    "()V"
-                )
-            end)
-        end,
+        isEnabled = function() return false end,
+        install = function() end,
     }
 
     android.orientation = {
