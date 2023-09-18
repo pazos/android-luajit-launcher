@@ -56,7 +56,8 @@ object LightsFactory {
                 }
                 DeviceInfo.LightsDevice.ONYX_C67,
                 DeviceInfo.LightsDevice.ONYX_MAGICBOOK,
-                DeviceInfo.LightsDevice.ONYX_MONTECRISTO3 -> {
+                DeviceInfo.LightsDevice.ONYX_MONTECRISTO3,
+                DeviceInfo.LightsDevice.ONYX_NOBLEX -> {
                     logController("Onyx C67")
                     OnyxC67Controller()
                 }
