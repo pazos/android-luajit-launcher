@@ -5,6 +5,7 @@
 # keep kotlin.Metadata annotations
 -keepattributes RuntimeVisibleAnnotations
 -keep class kotlin.Metadata { *; }
+-dontwarn org.tukaani.xz.LZMAInputStream
 
 # preserve the line number information for debugging stack traces.
 -keepattributes SourceFile,LineNumberTable
