@@ -94,12 +94,16 @@ android {
     compileOptions {
         coreLibraryDesugaringEnabled true
     }
-
     packagingOptions {
-        exclude '/kotlin/**.kotlin_builtins'
-        exclude '/kotlin/**.kotlin_metadata'
-        exclude '/META-INF/**.kotlin_module'
-        exclude '/META-INF/**.version'
+        jniLibs {
+            useLegacyPackaging true
+        }
+        resources {
+            excludes += '/kotlin/**.kotlin_builtins'
+            excludes += '/kotlin/**.kotlin_metadata'
+            excludes += '/META-INF/**.kotlin_module'
+            excludes += '/META-INF/**.version'
+        }
     }
 
 

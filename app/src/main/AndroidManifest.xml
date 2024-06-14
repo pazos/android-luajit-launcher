@@ -32,8 +32,7 @@
         android:fullBackupContent="false"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
-        android:supportsRtl="true"
-        android:extractNativeLibs="true" >
+        android:supportsRtl="true">
         <meta-data android:name="android.max_aspect" android:value="3.1" />
         <activity
             android:name=".MainActivity"
