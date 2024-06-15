@@ -5,7 +5,7 @@ android {
     namespace 'org.koreader.launcher'
     ndkVersion ndkRequiredVersion
     ndkPath ndkCustomPath
-    compileSdkVersion rootProject.ext.compileSdk
+    compileSdk rootProject.ext.compileSdk
     def baseVersionCode = versCode as Integer
 
     defaultConfig {
@@ -57,19 +57,32 @@ android {
         }
     }
 
-    flavorDimensions 'ABI', 'CHANNEL'
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    flavorDimensions = [ 'ABI', 'CHANNEL' ]
     productFlavors {
+        // Android Studio hates we don't use abiSplits
         arm {
+            //noinspection ChromeOsAbiSupport
             ndk { abiFilters "armeabi-v7a" }
             dimension = 'ABI'
             versionCode = baseVersionCode * 10 + 1
         }
         arm64 {
+            //noinspection ChromeOsAbiSupport
             ndk { abiFilters "arm64-v8a" }
             dimension = 'ABI'
             versionCode = baseVersionCode * 10 + 2
         }
         x86 {
+            //noinspection ChromeOsAbiSupport
             ndk { abiFilters "x86" }
             dimension = 'ABI'
             versionCode = baseVersionCode * 10 + 3
@@ -91,16 +104,6 @@ android {
         }
     }
 
-    compileOptions {
-        coreLibraryDesugaringEnabled true
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = '17'
-    }
-
     packagingOptions {
         jniLibs {
             useLegacyPackaging true
@@ -113,15 +116,16 @@ android {
         }
     }
 
-
     lint {
+        disable 'GradleDependency'
+        disable 'GrDeprecatedAPIUsage'
         disable 'QueryAllPackagesPermission'
         htmlReport false
         xmlReport false
     }
 
-    applicationVariants.all { variant ->
-        variant.outputs.all {
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach {
             outputFileName = "NativeActivity.apk"
         }
     }
@@ -133,12 +137,9 @@ repositories {
 }
 
 dependencies {
-    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:$android_desugar_jdk"
-
     implementation "androidx.core:core-ktx:$androidx_core_version"
     implementation "androidx.appcompat:appcompat:$androidx_appcompat_version"
     implementation "androidx.legacy:legacy-support-v4:$androidx_supportv4_version"
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_plugin_version"
     implementation "org.apache.commons:commons-compress:$commons_compress_version"
-
 }
