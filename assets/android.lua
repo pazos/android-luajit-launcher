@@ -1,5 +1,11 @@
 --[[--
-Java Native Interface (JNI) wrapper.
+
+ffi bindings for android native APIs.
+see https://developer.android.com/ndk/reference/struct/a-native-activity
+and https://developer.android.com/reference/games/game-activity/group/android-native-app-glue
+
+Includes (and heavily relies on) a Java Native Interface (JNI) wrapper, since it is
+usually simpler, easier and safer to run within the JVM. Sometimes it is also mandatory.
 
 @module android
 ]]
@@ -26,6 +32,8 @@ for _ = 1, 100 do end
 local ffi = require("ffi")
 
 ffi.cdef[[
+// posix:
+int chdir(const char *path);
 // logging:
 int __android_log_print(int prio, const char *tag,  const char *fmt, ...);
 typedef enum android_LogPriority {
@@ -2738,16 +2746,21 @@ local function run(android_app_state)
     -- register the asset loader
     table.insert(package.loaders, 2, android.asset_loader)
 
+    -- extract assets
     local installed = android.extractAssets()
     if not installed then
         error("error extracting assets")
     end
-    local launch = android.asset_loader("launcher")
-    if type(launch) == "function" then
-        return launch()
-    else
-        error("error loading launcher.lua")
+
+    -- the default current directory is root so we should first of all
+    -- change current directory to application's data directory
+    if C.chdir(android.dir) ~= 0 then
+        local err = "Unable to change working directory to '" .. android.dir .. "'"
+        android.LOGE(err)
+        error(err)
     end
+
+    dofile(android.dir.."/llapp_main.lua")
 end
 
 run(...)
